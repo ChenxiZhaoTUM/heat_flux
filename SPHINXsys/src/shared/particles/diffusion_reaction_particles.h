@@ -52,6 +52,9 @@ namespace SPH
 	public:
 		StdVec<StdLargeVec<Real>> species_n_;	 /**< array of diffusion/reaction scalars */
 		StdVec<StdLargeVec<Real>> diffusion_dt_; /**< array of the time derivative of diffusion species */
+		StdLargeVec<Real> external_diffusion_dt_; /**< array of the time derivative of diffusion species */
+		StdLargeVec<Real> external_diffusion_dt_sum_; /**< array of the time derivative of diffusion species */
+		StdLargeVec<Real> thermal_conductivity_; /**< array of the time derivative of diffusion species */
 		DiffusionReaction<BaseMaterialType, NUM_SPECIES> &diffusion_reaction_material_;
 
 		DiffusionReactionParticles(SPHBody &sph_body,
@@ -64,6 +67,9 @@ namespace SPH
 		{
 			species_n_.resize(number_of_species_);
 			diffusion_dt_.resize(number_of_diffusion_species_);
+			thermal_conductivity_.resize(number_of_diffusion_species_);
+			external_diffusion_dt_.resize(number_of_diffusion_species_);
+			external_diffusion_dt_sum_.resize(number_of_diffusion_species_);
 		};
 		virtual ~DiffusionReactionParticles(){};
 
@@ -83,7 +89,10 @@ namespace SPH
 				/** add species to basic output particle data. */
 				this->template addVariableToWrite<Real>(itr->first);
 			}
-
+			this->registerVariable(external_diffusion_dt_sum_, "HeatFlux");
+			this->registerVariable(thermal_conductivity_, "ThermalConductivity");
+			this->addVariableToWrite<Real>("HeatFlux");
+			this->addVariableToWrite<Real>("ThermalConductivity");
 			for (size_t m = 0; m < number_of_diffusion_species_; ++m)
 			{
 				constexpr int type_index = DataTypeIndex<Real>::value;
@@ -92,6 +101,8 @@ namespace SPH
 				 */
 				std::get<type_index>(this->all_particle_data_).push_back(&diffusion_dt_[m]);
 				diffusion_dt_[m].resize(this->real_particles_bound_, Real(0));
+				std::get<type_index>(this->all_particle_data_).push_back(&external_diffusion_dt_);
+				external_diffusion_dt_.resize(this->real_particles_bound_, Real(0));
 			}
 		};
 
