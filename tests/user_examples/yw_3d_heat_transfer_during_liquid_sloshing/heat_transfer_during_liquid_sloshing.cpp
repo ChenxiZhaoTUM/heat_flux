@@ -1,6 +1,6 @@
 /**
- * @file 	tank_v_multiphase.cpp
- * @brief 	3D Two-phase Sloshing in a Vertical Cylindrical Tank under Lateral Excitation
+ * @file 	heat_transfer_during_liquid_sloshing.cpp
+ * @brief 	Heat Transfer During Liquid Sloshing
  */
 #include "sphinxsys.h"
 #include "tank_case.h"
@@ -27,7 +27,7 @@ int main(int ac, char* av[])
 	IOEnvironment in_output(system);
 
 	/*
-	@Brief creating body, materials and particles for the tank, water, and air.
+	@Brief creating body, materials and particles for the tank, water, air, and sensors.
 	*/
 	SolidBody tank(system, makeShared<Tank>("Tank"));
 	tank.defineParticlesAndMaterial<SolidParticles, Solid>();
@@ -35,17 +35,20 @@ int main(int ac, char* av[])
 	(!system.RunParticleRelaxation() && system.ReloadParticles())
 		? tank.generateParticles<ParticleGeneratorReload>(in_output, tank.getName())
 		: tank.generateParticles<ParticleGeneratorLattice>();
-
+	
 	FluidBody water_block(system, makeShared<WaterBlock>("WaterBody"));
-	water_block.defineParticlesAndMaterial<FluidParticles, WeaklyCompressibleFluid>(rho0_f, c_f);
-	water_block.defineBodyLevelSetShape()->writeLevelSet(in_output);
+	water_block.defineParticlesAndMaterial<DiffusionReactionParticles<FluidParticles, WeaklyCompressibleFluid>, ThermoWaterBodyMaterial>();
 	water_block.generateParticles<ParticleGeneratorLattice>();
 
-
 	FluidBody air_block(system, makeShared<AirBlock>("AirBody"));
-	air_block.defineParticlesAndMaterial<FluidParticles, WeaklyCompressibleFluid>(rho0_a, c_f);
-	air_block.defineBodyLevelSetShape()->writeLevelSet(in_output);
+	air_block.defineParticlesAndMaterial<DiffusionReactionParticles<FluidParticles, WeaklyCompressibleFluid>, ThermoAirBodyMaterial>();
 	air_block.generateParticles<ParticleGeneratorLattice>();
+
+	ObserverBody liquid_temperature_observer(system, "LiquidTemperatureObserver");
+	liquid_temperature_observer.generateParticles<LiquidTemperatureObserverParticleGenerator>();
+
+	ObserverBody gas_temperature_observer(system, "GasTemperatureObserver");
+	gas_temperature_observer.generateParticles<GasTemperatureObserverParticleGenerator>();
 
 	InnerRelation tank_inner(tank);
 	//----------------------------------------------------------------------
@@ -56,7 +59,7 @@ int main(int ac, char* av[])
 		//----------------------------------------------------------------------
 		//	Methods used for particle relaxation.
 		//----------------------------------------------------------------------
-		/** Random reset the tank particle position. */
+		/** Random reset the insert body particle position. */
 		SimpleDynamics<RandomizeParticlePosition> random_tank_particles(tank);
 		/** Write the body state to Vtp file. */
 		BodyStatesRecordingToVtp write_tank_to_vtp(in_output, { &tank });
@@ -71,7 +74,7 @@ int main(int ac, char* av[])
 		tank_relaxation_step_inner.SurfaceBounding().parallel_exec();
 		write_tank_to_vtp.writeToFile(0);
 		//----------------------------------------------------------------------
-		//	Relax particles of the tank.
+		//	Relax particles of the insert body.
 		//----------------------------------------------------------------------
 		int ite_p = 0;
 		while (ite_p < 1000)
@@ -89,16 +92,22 @@ int main(int ac, char* av[])
 		write_tank_particle_reload_files.writeToFile(0);
 		return 0;
 	}
+
 	ContactRelation water_block_contact(water_block,{ &tank });
 	ContactRelation air_block_contact(air_block, { &tank });
+	ContactRelation liquid_temperature_observer_contact(liquid_temperature_observer, { &water_block });
+	ContactRelation gas_temperature_observer_contact(gas_temperature_observer, { &air_block });
 	ComplexRelation water_air_complex(water_block, { &air_block });
 	ComplexRelation air_water_complex(air_block, { &water_block });
+
 	/*
 	@Brief define simple data file input and outputs functions.
 	*/
 	BodyStatesRecordingToVtp 			write_real_body_states(in_output, system.real_bodies_);
 	RestartIO							restart_io(in_output, system.real_bodies_);
-
+	ObservedQuantityRecording<Real> write_temperature_liquid("Phi", in_output, liquid_temperature_observer_contact);
+	ObservedQuantityRecording<Real> write_temperature_gas("Phi", in_output, gas_temperature_observer_contact);
+	
 	SimpleDynamics<NormalDirectionFromShapeAndOp> inner_normal_direction(tank,"InnerWall");
 	SimpleDynamics<TimeStepInitialization> initialize_a_water_step(water_block, makeShared<VariableGravity>());
 	SimpleDynamics<TimeStepInitialization> initialize_a_air_step(air_block, makeShared<VariableGravity>());
@@ -117,6 +126,15 @@ int main(int ac, char* av[])
 	Dynamics1Level<fluid_dynamics::MultiPhaseIntegration2ndHalfRiemannWithWall>
 		air_density_relaxation(air_block_contact, air_water_complex);
 
+	SimpleDynamics<ThermoAirBodyInitialCondition> thermo_air_initial_condition(air_block);
+	SimpleDynamics<ThermoWaterBodyInitialCondition> thermo_water_initial_condition(water_block);
+
+	GetDiffusionTimeStepSize<FluidParticles, WeaklyCompressibleFluid> get_thermal_time_step_water(water_block);
+	GetDiffusionTimeStepSize<FluidParticles, WeaklyCompressibleFluid> get_thermal_time_step_air(air_block);
+
+	ThermalRelaxationComplex thermal_relaxation_complex_water(water_air_complex);
+	ThermalRelaxationComplex thermal_relaxation_complex_air(air_water_complex);
+	
 	BodyRegionByCell probe_s1(water_block, makeShared<ProbeS1>("PorbeS1"));
 	ReducedQuantityRecording<ReduceDynamics<fluid_dynamics::FreeSurfaceHeight, BodyRegionByCell>>
 		probe_1(in_output, probe_s1);
@@ -126,6 +144,7 @@ int main(int ac, char* av[])
 	BodyRegionByCell probe_s3(water_block, makeShared<ProbeS3>("PorbeS3"));
 	ReducedQuantityRecording<ReduceDynamics<fluid_dynamics::FreeSurfaceHeight, BodyRegionByCell>>
 		probe_3(in_output, probe_s3);
+		
 	/**
  * @brief Pre-simulation.
  */
@@ -135,8 +154,10 @@ int main(int ac, char* av[])
 	system.initializeSystemConfigurations();
 	/** computing surface normal direction for the tank. */
 	inner_normal_direction.parallel_exec();
-
+	/** computing linear reproducing configuration for the tank. */
 	write_real_body_states.writeToFile(0);
+	thermo_water_initial_condition.parallel_exec();
+	thermo_air_initial_condition.parallel_exec();
 	probe_1.writeToFile(0);
 	probe_2.writeToFile(0);
 	probe_3.writeToFile(0);
@@ -176,22 +197,29 @@ int main(int ac, char* av[])
 			fluid_density_by_summation.parallel_exec();
 			air_density_by_summation.parallel_exec();
 			air_transport_correction.parallel_exec();
+
 			Real relaxation_time = 0.0;
 			while (relaxation_time < Dt)
 			{
 				Real dt_f = fluid_acoustic_time_step.parallel_exec();
 				Real dt_a = air_acoustic_time_step.parallel_exec();
-				dt = SMIN(SMIN(dt_f, dt_a), Dt);
+				Real dt_thermal_water = get_thermal_time_step_water.parallel_exec();
+				Real dt_thermal_air = get_thermal_time_step_air.parallel_exec();
+				dt = SMIN(SMIN(dt_f,dt_thermal_water),SMIN(dt_thermal_air, dt_a), Dt);
 				/* Fluid pressure relaxation */
 				fluid_pressure_relaxation.parallel_exec(dt);
 				air_pressure_relaxation.parallel_exec(dt);
 				/* Fluid density relaxation */
 				fluid_density_relaxation.parallel_exec(dt);
 				air_density_relaxation.parallel_exec(dt);
+				thermal_relaxation_complex_air.parallel_exec(dt);
+				thermal_relaxation_complex_water.parallel_exec(dt);
 				relaxation_time += dt;
 				integration_time += dt;
 				GlobalStaticVariables::physical_time_ += dt;
+
 			}
+
 			/** screen output, write body reduced values and restart files  */
 			if (number_of_iterations % screen_output_interval == 0)
 			{
@@ -202,10 +230,9 @@ int main(int ac, char* av[])
 				if (number_of_iterations % restart_output_interval == 0)
 					restart_io.writeToFile(number_of_iterations);
 			}
+			
 			number_of_iterations++;
-			probe_1.writeToFile(number_of_iterations);
-			probe_2.writeToFile(number_of_iterations);
-			probe_3.writeToFile(number_of_iterations);
+
 			/** Update cell linked list and configuration. */
 			water_block.updateCellLinkedListWithParticleSort(100);
 			water_block_contact.updateConfiguration();
@@ -214,15 +241,24 @@ int main(int ac, char* av[])
 			air_block.updateCellLinkedListWithParticleSort(100);
 			air_block_contact.updateConfiguration();
 			air_water_complex.updateConfiguration();
-	
+
+			liquid_temperature_observer_contact.updateConfiguration();
+			gas_temperature_observer_contact.updateConfiguration();
 		}
 		tick_count t2 = tick_count::now();
 		/** write run-time observation into file */
+
 		write_real_body_states.writeToFile();
+		probe_1.writeToFile();
+		probe_2.writeToFile();
+		probe_3.writeToFile();
+		write_temperature_liquid.writeToFile();
+		write_temperature_gas.writeToFile();
 		tick_count t3 = tick_count::now();
 		interval += t3 - t2;
 	}
 	tick_count t4 = tick_count::now();
+
 	tick_count::interval_t tt;
 	tt = t4 - t1 - interval;
 	std::cout << "Total wall time for computation: " << tt.seconds() << " seconds." << std::endl;

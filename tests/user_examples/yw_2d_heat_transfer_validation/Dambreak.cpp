@@ -1,118 +1,131 @@
 /**
- * @file 	dambreak.cpp
- * @brief 	2D dambreak example.
- * @details This is the one of the basic test cases, also the first case for
- * 			understanding SPH method for fluid simulation.
- * @author 	Luhui Han, Chi Zhang and Xiangyu Hu
+ * @file 	heat_transfer_validation.cpp
+ * @brief 	Heat Transfer in Slabs
  */
 #include "sphinxsys.h" //SPHinXsys Library.
 #define PI (3.14159265358979323846)
 using namespace SPH;   // Namespace cite here.
-//----------------------------------------------------------------------
-//	Basic geometry parameters and numerical setup.
-//----------------------------------------------------------------------
-
-
-Real dp = 0.0125;	/**< Initial reference particle spacing. */
 
 //----------------------------------------------------------------------
 //	Material parameters.
 //----------------------------------------------------------------------
-Real rho0_f = 1000.0;					 /**< Reference density of fluid. */
-Real rho0_v = 1.226;						 /**< Reference density of air. */
-Real c_p_liquid = 4.179;
-Real c_p_vapor = 1.012;
-Real k_liquid = 0.620;
-Real k_vapor = 0.0254;
-Real diffusion_coff_liquid = k_liquid / (c_p_liquid * rho0_f);
-Real diffusion_coff_vapor = k_vapor / (c_p_vapor * rho0_v);
+Real rho0_r = 1000.0;					 /**< Reference density of right material. */
+Real rho0_l = 1.226;						 /**< Reference density of left material. */
+Real c_p_r = 4.179;
+Real c_p_l = 1.012;
+Real k_r = 0.620;
+Real k_l = 0.0254;
+Real diffusion_coff_r = k_r / (c_p_r * rho0_r);
+Real diffusion_coff_l = k_l / (c_p_l * rho0_l);
+Real dp = 0.0125;	/**< Initial reference particle spacing. */
 
-Real c_f = 1.0;				 /**< Reference sound speed. */
+Real c_ = 1.0;				 /**< Reference sound speed. */
 //----------------------------------------------------------------------
 //	Geometric elements used in shape modeling.
 //----------------------------------------------------------------------
-std::vector<Vecd> createWaterBlockShape()
+std::vector<Vecd> createRightBlockShape()
 {
-	std::vector<Vecd> water_block_shape;
-	water_block_shape.push_back(Vecd(40*dp, 0.0));
-	water_block_shape.push_back(Vecd(40*dp, 40*dp));
-	water_block_shape.push_back(Vecd(80*dp, 40*dp));
-	water_block_shape.push_back(Vecd(80*dp, 0.0));
-	water_block_shape.push_back(Vecd(40*dp, 0.0));
-	return water_block_shape;
+	std::vector<Vecd> right_block_shape;
+	right_block_shape.push_back(Vecd(40*dp, 0.0));
+	right_block_shape.push_back(Vecd(40*dp, 40*dp));
+	right_block_shape.push_back(Vecd(80*dp, 40*dp));
+	right_block_shape.push_back(Vecd(80*dp, 0.0));
+	right_block_shape.push_back(Vecd(40*dp, 0.0));
+	return right_block_shape;
 }
 
-std::vector<Vecd> createAirBlockShape()
+std::vector<Vecd> createLeftBlockShape()
 {
-	std::vector<Vecd> air_block_shape;
-	air_block_shape.push_back(Vecd(0.0, 0.0));
-	air_block_shape.push_back(Vecd(0.0, 40*dp));
-	air_block_shape.push_back(Vecd(40*dp, 40*dp));
-	air_block_shape.push_back(Vecd(40*dp, 0.0));
-	air_block_shape.push_back(Vecd(0.0, 0.0));
-
-	return air_block_shape;
+	std::vector<Vecd> left_block_shape;
+	left_block_shape.push_back(Vecd(0.0, 0.0));
+	left_block_shape.push_back(Vecd(0.0, 40*dp));
+	left_block_shape.push_back(Vecd(40*dp, 40*dp));
+	left_block_shape.push_back(Vecd(40*dp, 0.0));
+	left_block_shape.push_back(Vecd(0.0, 0.0));
+	return left_block_shape;
 }
 //----------------------------------------------------------------------
-//	cases-dependent geometric shape for water block.
+//	cases-dependent geometric shape for right block.
 //----------------------------------------------------------------------
-class WaterBlock : public MultiPolygonShape
+class RightBlock : public MultiPolygonShape
 {
 public:
-	explicit WaterBlock(const std::string &shape_name) : MultiPolygonShape(shape_name)
+	explicit RightBlock(const std::string &shape_name) : MultiPolygonShape(shape_name)
 	{
-		multi_polygon_.addAPolygon(createWaterBlockShape(), ShapeBooleanOps::add);
+		multi_polygon_.addAPolygon(createRightBlockShape(), ShapeBooleanOps::add);
 	}
 };
 
 //----------------------------------------------------------------------
-//	cases-dependent geometric shape for air block.
+//	cases-dependent geometric shape for left block.
 //----------------------------------------------------------------------
-class AirBlock : public MultiPolygonShape
+class LeftBlock : public MultiPolygonShape
 {
 public:
-	explicit AirBlock(const std::string &shape_name) : MultiPolygonShape(shape_name)
+	explicit LeftBlock(const std::string &shape_name) : MultiPolygonShape(shape_name)
 	{
-		multi_polygon_.addAPolygon(createAirBlockShape(), ShapeBooleanOps::add);
+		multi_polygon_.addAPolygon(createLeftBlockShape(), ShapeBooleanOps::add);
 	}
 };
 
-
 //----------------------------------------------------------------------
-//	Setup heat conduction material properties for diffusion fluid body
+//	Setup heat conduction material properties for diffusion right body
 //----------------------------------------------------------------------
-class ThermoWaterBodyMaterial : public DiffusionReaction<WeaklyCompressibleFluid>
+class ThermoRightBodyMaterial : public DiffusionReaction<WeaklyCompressibleFluid>
 {
 public:
-	ThermoWaterBodyMaterial()
-		: DiffusionReaction<WeaklyCompressibleFluid>({ "Phi" }, rho0_f,c_f)
+	ThermoRightBodyMaterial()
+		: DiffusionReaction<WeaklyCompressibleFluid>({ "Phi" }, rho0_r,c_)
 	{
-		initializeAnDiffusion<IsotropicDiffusion>("Phi", "Phi", diffusion_coff_liquid);
+		initializeAnDiffusion<IsotropicDiffusion>("Phi", "Phi", diffusion_coff_r);
 	};
 };
 //----------------------------------------------------------------------
-//	Setup heat conduction material properties for diffusion solid body
+//	Setup heat conduction material properties for diffusion left body
 //----------------------------------------------------------------------
-class ThermoAirBodyMaterial : public DiffusionReaction<WeaklyCompressibleFluid>
+class ThermoLeftBodyMaterial : public DiffusionReaction<WeaklyCompressibleFluid>
 {
 public:
-	ThermoAirBodyMaterial() : DiffusionReaction<WeaklyCompressibleFluid>({ "Phi" }, rho0_v,c_f)
+	ThermoLeftBodyMaterial() : DiffusionReaction<WeaklyCompressibleFluid>({ "Phi" }, rho0_l,c_)
 	{
 		// only default property is given, as no heat transfer within solid considered here.
-		initializeAnDiffusion<IsotropicDiffusion>("Phi", "Phi",diffusion_coff_vapor);
+		initializeAnDiffusion<IsotropicDiffusion>("Phi", "Phi",diffusion_coff_l);
 	};
 };
 //----------------------------------------------------------------------
-//	Application dependent solid body initial condition
+//	Application dependent right body initial condition
 //----------------------------------------------------------------------
-class ThermoAirBodyInitialCondition
+class ThermoRightBodyInitialCondition
 	: public DiffusionReactionInitialCondition<FluidParticles, WeaklyCompressibleFluid>
 {
 protected:
 	size_t phi_;
 
 public:
-	explicit ThermoAirBodyInitialCondition(SPHBody &sph_body)
+	explicit ThermoRightBodyInitialCondition(SPHBody& sph_body)
+		: DiffusionReactionInitialCondition<FluidParticles, WeaklyCompressibleFluid>(sph_body)
+	{
+		phi_ = particles_->diffusion_reaction_material_.SpeciesIndexMap()["Phi"];
+	};
+
+	void update(size_t index_i, Real dt)
+	{
+		species_n_[phi_][index_i] = 1.0;
+		thermal_conductivity_[index_i] = k_r;
+	};
+};
+
+//----------------------------------------------------------------------
+//	Application dependent left body initial condition
+//----------------------------------------------------------------------
+class ThermoLeftBodyInitialCondition
+	: public DiffusionReactionInitialCondition<FluidParticles, WeaklyCompressibleFluid>
+{
+protected:
+	size_t phi_;
+
+public:
+	explicit ThermoLeftBodyInitialCondition(SPHBody &sph_body)
 		: DiffusionReactionInitialCondition<FluidParticles, WeaklyCompressibleFluid>(sph_body)
 	{
 		phi_ = particles_->diffusion_reaction_material_.SpeciesIndexMap()["Phi"];
@@ -121,31 +134,10 @@ public:
 	void update(size_t index_i, Real dt)
 	{
 		species_n_[phi_][index_i] = 0.0;
-		thermal_conductivity_[index_i] = k_vapor;
+		thermal_conductivity_[index_i] = k_l;
 	};
 };
-//----------------------------------------------------------------------
-//	Application dependent fluid body initial condition
-//----------------------------------------------------------------------
-class ThermoWaterBodyInitialCondition
-	: public DiffusionReactionInitialCondition<FluidParticles, WeaklyCompressibleFluid>
-{
-protected:
-	size_t phi_;
 
-public:
-	explicit ThermoWaterBodyInitialCondition(SPHBody &sph_body)
-		: DiffusionReactionInitialCondition<FluidParticles, WeaklyCompressibleFluid>(sph_body)
-	{
-		phi_ = particles_->diffusion_reaction_material_.SpeciesIndexMap()["Phi"];
-	};
-
-	void update(size_t index_i, Real dt)
-	{
-			species_n_[phi_][index_i] = 1.0;
-			thermal_conductivity_[index_i] = k_liquid;
-	};
-};
 //----------------------------------------------------------------------
 //	Set thermal relaxation between different bodies
 //----------------------------------------------------------------------
@@ -192,15 +184,15 @@ int main(int ac, char *av[])
 	//----------------------------------------------------------------------
 	//	Creating bodies with corresponding materials and particles.
 	//----------------------------------------------------------------------
-	FluidBody water_block(sph_system, makeShared<WaterBlock>("WaterBody"));
-	water_block.defineAdaptation<SPHAdaptation>(1.0, 1.0);
-	water_block.defineParticlesAndMaterial<DiffusionReactionParticles<FluidParticles, WeaklyCompressibleFluid>, ThermoWaterBodyMaterial>();
-	water_block.generateParticles<ParticleGeneratorLattice>();
+	FluidBody right_block(sph_system, makeShared<RightBlock>("RightBody"));
+	right_block.defineAdaptation<SPHAdaptation>(1.0, 1.0);
+	right_block.defineParticlesAndMaterial<DiffusionReactionParticles<FluidParticles, WeaklyCompressibleFluid>, ThermoRightBodyMaterial>();
+	right_block.generateParticles<ParticleGeneratorLattice>();
 
-	FluidBody vapor_block(sph_system, makeShared<AirBlock>("AirBody"));
-	vapor_block.defineAdaptation<SPHAdaptation>(1.0, 1.0);
-	vapor_block.defineParticlesAndMaterial<DiffusionReactionParticles<FluidParticles, WeaklyCompressibleFluid>, ThermoAirBodyMaterial>();
-	vapor_block.generateParticles<ParticleGeneratorLattice>();
+	FluidBody left_block(sph_system, makeShared<LeftBlock>("LeftBody"));
+	left_block.defineAdaptation<SPHAdaptation>(1.0, 1.0);
+	left_block.defineParticlesAndMaterial<DiffusionReactionParticles<FluidParticles, WeaklyCompressibleFluid>, ThermoLeftBodyMaterial>();
+	left_block.generateParticles<ParticleGeneratorLattice>();
 
 	ObserverBody temperature_observer(sph_system, "TemperatureObserver");
 	temperature_observer.generateParticles<TemperatureObserverParticleGenerator>();
@@ -210,56 +202,33 @@ int main(int ac, char *av[])
 	//	The contact map gives the topological connections between the bodies.
 	//	Basically the the range of bodies to build neighbor particle lists.
 	//----------------------------------------------------------------------
-	//----------------------------------------------------------------------
-	//	Define body relation map.
-	//	The contact map gives the topological connections between the bodies.
-	//	Basically the the range of bodies to build neighbor particle lists.
-	//----------------------------------------------------------------------
-	ComplexRelation water_vapor_complex(water_block, { &vapor_block });
-	ComplexRelation vapor_water_complex(vapor_block, { &water_block });
-	ContactRelation temperature_observer_contact(temperature_observer, RealBodyVector{ &water_block,&vapor_block });
-
-	//BodyRelationContact fluid_observer_contact(fluid_observer, {&water_block});
+	ComplexRelation right_left_complex(right_block, { &left_block });
+	ComplexRelation left_right_complex(left_block, { &right_block });
+	ContactRelation temperature_observer_contact(temperature_observer, RealBodyVector{ &right_block,&left_block });
 	//----------------------------------------------------------------------
 	//	Define the numerical methods used in the simulation.
 	//	Note that there may be data dependence on the sequence of constructions.
 	//----------------------------------------------------------------------
 	/** Initialize particle acceleration. */
+	SimpleDynamics<ThermoRightBodyInitialCondition> thermo_right_initial_condition(right_block);
+	SimpleDynamics<ThermoLeftBodyInitialCondition> thermo_left_initial_condition(left_block);
+	GetDiffusionTimeStepSize<FluidParticles, WeaklyCompressibleFluid> get_thermal_time_step_right(right_block);
+	GetDiffusionTimeStepSize<FluidParticles, WeaklyCompressibleFluid> get_thermal_time_step_left(left_block);
+	ThermalRelaxationComplex thermal_relaxation_complex_right(right_left_complex);
+	ThermalRelaxationComplex thermal_relaxation_complex_left(left_right_complex);
 
-	SimpleDynamics<ThermoAirBodyInitialCondition> thermo_vapor_initial_condition(vapor_block);
-	SimpleDynamics<ThermoWaterBodyInitialCondition> thermo_water_initial_condition(water_block);
-
-	GetDiffusionTimeStepSize<FluidParticles, WeaklyCompressibleFluid> get_thermal_time_step_water(water_block);
-	GetDiffusionTimeStepSize<FluidParticles, WeaklyCompressibleFluid> get_thermal_time_step_vapor(vapor_block);
-
-	//PeriodicConditionUsingCellLinkedList periodic_condition_water(water_block, water_block.getBodyShapeBounds(), yAxis);
-	//PeriodicConditionUsingCellLinkedList periodic_condition_vapor(vapor_block, vapor_block.getBodyShapeBounds(), yAxis);
-	ThermalRelaxationComplex thermal_relaxation_complex_water(water_vapor_complex);
-	ThermalRelaxationComplex thermal_relaxation_complex_vapor(vapor_water_complex);
-
-	/*ReducedQuantityRecording<ReduceDynamics<DiffusionReactionSpeciesSummation<FluidParticles, WeaklyCompressibleFluid>>>
-		write_external_heat_water(io_environment, water_block, 2000);
-	ReducedQuantityRecording<ReduceDynamics<DiffusionReactionSpeciesSummation<FluidParticles, WeaklyCompressibleFluid>>>
-		write_external_heat_vapor(io_environment, vapor_block, 1006.43);*/
 	//----------------------------------------------------------------------
 	//	Define the methods for I/O operations, observations
 	//	and regression tests of the simulation.
 	//----------------------------------------------------------------------
 	BodyStatesRecordingToVtp body_states_recording(io_environment, sph_system.real_bodies_);
 	RestartIO restart_io(io_environment, sph_system.real_bodies_);
-	/*RegressionTestDynamicTimeWarping<BodyReducedQuantityRecording<ReduceDynamics<TotalMechanicalEnergy>>>
-		write_water_mechanical_energy(io_environment, water_block, gravity_ptr);
-	/*RegressionTestDynamicTimeWarping<ObservedQuantityRecording<Real>>
-		write_recorded_water_pressure("Pressure", io_environment, fluid_observer_contact);*/
 	ObservedQuantityRecording<Real> write_temperature("Phi", io_environment, temperature_observer_contact);
-
 	//----------------------------------------------------------------------
 	//	Prepare the simulation with cell linked list, configuration
 	//	and case specified initial condition if necessary.
 	//----------------------------------------------------------------------
 	sph_system.initializeSystemCellLinkedLists();
-	//periodic_condition_water.update_cell_linked_list_.parallel_exec();
-	//periodic_condition_vapor.update_cell_linked_list_.parallel_exec();
 	sph_system.initializeSystemConfigurations();
 	//----------------------------------------------------------------------
 	//	Load restart file if necessary.
@@ -267,13 +236,10 @@ int main(int ac, char *av[])
 	if (sph_system.RestartStep() != 0)
 	{
 		GlobalStaticVariables::physical_time_ = restart_io.readRestartFiles(sph_system.RestartStep());
-		water_block.updateCellLinkedList();
-		vapor_block.updateCellLinkedList();
-		water_vapor_complex.updateConfiguration();
-		vapor_water_complex.updateConfiguration();
-
-
-		//fluid_observer_contact.updateConfiguration();
+		right_block.updateCellLinkedList();
+		left_block.updateCellLinkedList();
+		right_left_complex.updateConfiguration();
+		left_right_complex.updateConfiguration();
 	}
 	//----------------------------------------------------------------------
 	//	Setup for time-stepping control
@@ -299,12 +265,10 @@ int main(int ac, char *av[])
 	//----------------------------------------------------------------------
 	//	First output before the main loop.
 	//----------------------------------------------------------------------
-
-	thermo_water_initial_condition.parallel_exec();
-	thermo_vapor_initial_condition.parallel_exec();
+	thermo_right_initial_condition.parallel_exec();
+	thermo_left_initial_condition.parallel_exec();
 	body_states_recording.writeToFile(0);
 	write_temperature.writeToFile(0);
-
 	//----------------------------------------------------------------------
 	//	Main loop starts here.
 	//----------------------------------------------------------------------
@@ -315,21 +279,18 @@ int main(int ac, char *av[])
 		/** Integrate time (loop) until the next output time. */
 		while (integration_time < Output_Time)
 		{
-			/** Acceleration due to viscous force and gravity. */
 			time_instance = tick_count::now();
 			interval_computing_time_step += tick_count::now() - time_instance;
-
-			/** Dynamics including pressure relaxation. */
 			time_instance = tick_count::now();
 			Real relaxation_time = 0.0;
 			while (relaxation_time < Observe_time)
 			{
-				Real dt_thermal_water = get_thermal_time_step_water.parallel_exec();
-				Real dt_thermal_air = get_thermal_time_step_vapor.parallel_exec();
-				dt = SMIN(dt_thermal_water, dt_thermal_air);
+				Real dt_thermal_right = get_thermal_time_step_right.parallel_exec();
+				Real dt_thermal_left = get_thermal_time_step_left.parallel_exec();
+				dt = SMIN(dt_thermal_right, dt_thermal_left);
 
-				thermal_relaxation_complex_vapor.parallel_exec(dt);
-				thermal_relaxation_complex_water.parallel_exec(dt);
+				thermal_relaxation_complex_left.parallel_exec(dt);
+				thermal_relaxation_complex_right.parallel_exec(dt);
 
 				if (ite % 100== 0)
 				{
@@ -345,36 +306,26 @@ int main(int ac, char *av[])
 
 			interval_computing_fluid_pressure_relaxation += tick_count::now() - time_instance;
 			/** Update cell linked list and configuration. */
-			//periodic_condition_water.bounding_.parallel_exec();
-			//periodic_condition_vapor.bounding_.parallel_exec();
-			water_block.updateCellLinkedListWithParticleSort(100);
-			vapor_block.updateCellLinkedListWithParticleSort(100);
-			//periodic_condition_water.update_cell_linked_list_.parallel_exec();
+			right_block.updateCellLinkedListWithParticleSort(100);
+			left_block.updateCellLinkedListWithParticleSort(100);
 
-			//periodic_condition_vapor.update_cell_linked_list_.parallel_exec();
-			water_vapor_complex.updateConfiguration();
-			vapor_water_complex.updateConfiguration();
+			right_left_complex.updateConfiguration();
+			left_right_complex.updateConfiguration();
 			temperature_observer_contact.updateConfiguration();
 			write_temperature.writeToFile();
-			//write_temperature.writeToFile();
 			time_instance = tick_count::now();
 			interval_updating_configuration += tick_count::now() - time_instance;
 		}
 
 		tick_count t2 = tick_count::now();
 		body_states_recording.writeToFile();
-		
-		
 		tick_count t3 = tick_count::now();
 		interval += t3 - t2;
 	}
-
 	tick_count t4 = tick_count::now();
-
 	tick_count::interval_t tt;
 	tt = t4 - t1 - interval;
 	std::cout << "Total wall time for computation: " << tt.seconds()
 		<< " seconds." << std::endl;
-
 	return 0;
 };

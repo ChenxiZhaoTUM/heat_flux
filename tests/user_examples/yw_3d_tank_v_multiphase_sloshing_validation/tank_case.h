@@ -1,5 +1,5 @@
 /*
-* @file 	waterentry_elastic_case.h
+* @file 	tank_case.h
 */
 
 #ifndef	TANK_CASE_H
@@ -9,15 +9,9 @@
 #define PI (3.14159265358979323846)
 using namespace SPH;
 
-/*@brief Basic geometry parameters and numerical setup.
-*/
-
-Real resolution_ref = 0.005;   /* Initial particle spacing*/
-
-
 /* Domain bounds of the system*/
-BoundingBox system_domain_bounds(Vec3d(-0.2, -0.05,-0.2), Vec3d(0.2, 1.0,0.2));
-
+BoundingBox system_domain_bounds(Vec3d(-0.3, -0.3,-0.3), Vec3d(0.3, 0.5,0.3));
+Real resolution_ref = 0.005;   /* Initial particle spacing*/
 
 /*
 Material properties of the fluid.
@@ -29,26 +23,21 @@ Real U_f = 2.0* sqrt(gravity_g * 0.174);	/**< Characteristic velocity. */
 Real U_g = 2.0* sqrt(gravity_g * 0.174);  	/**< dispersion velocity in shallow water. */
 Real c_f = 10.0 * SMAX(U_g, U_f);	/**< Reference sound speed. */
 
-Real c_p_water = 4.179;
-Real c_p_air = 1.012;
-Real k_water = 0.620;
-Real k_air = 0.0254;
-Real diffusion_coff_water = k_water / (c_p_water * rho0_f);
-Real diffusion_coff_air = k_air / (c_p_air * rho0_a);
-
 Real length_scale = 1.0;
 Vec3d translation(0, 0.175, 0);
-
-std::string fuel_tank_outer = "./input/tank_outer.STL";
-std::string fuel_tank_inner = "./input/tank_inner.STL";
-std::string water_05 = "./input/water_05.STL";
-std::string air_05 = "./input/gas_05.STL";
+/*
+Geometry of the tank, water, air, and sensors.
+*/
+std::string fuel_tank_outer = "./input/validation_tank_outer_slim.STL";
+std::string fuel_tank_inner = "./input/validation_tank_inner.STL";
+std::string water_05 = "./input/validation_water.STL";
+std::string air_05 = "./input/validation_air.STL";
 std::string probe_s1_shape = "./input/ProbeS1.STL";
 std::string probe_s2_shape = "./input/ProbeS2.STL";
 std::string probe_s3_shape = "./input/ProbeS3.STL";
 
 /*
-Fuel Tank.
+The Tank.
 */
 class Tank : public ComplexShape
 {
@@ -61,6 +50,10 @@ public:
 		subtract<TriangleMeshShapeSTL>(fuel_tank_inner, translation, length_scale,"InnerWall");
 	}
 };
+
+/*
+The Water.
+*/
 class WaterBlock : public ComplexShape
 {
 public:
@@ -70,6 +63,9 @@ public:
 	}
 };
 
+/*
+The Air.
+*/
 class AirBlock : public ComplexShape
 {
 public:
@@ -79,6 +75,9 @@ public:
 	}
 };
 
+/*
+External Excitation
+*/
 class VariableGravity : public Gravity
 {
 	Real time_ = 0;
@@ -87,13 +86,18 @@ public:
 	virtual Vecd InducedAcceleration(Vecd& position) override
 	{
 		time_= GlobalStaticVariables::physical_time_;
-
-		global_acceleration_[0] = 0.5*sin(2 * PI*1.78*time_);
+		if (time_ > 0.25)
+		{
+			global_acceleration_[0] = 4 * PI*PI* 1.63*1.63*0.0075*sin(2 * PI*1.63*(time_-0.25));
+		}
 		
 		return global_acceleration_;
 	}
 };
 
+/*
+Sensors: S1, S2 and S3;
+*/
 class ProbeS1 : public ComplexShape
 {
 public:
@@ -124,85 +128,4 @@ public:
 	}
 };
 
-//----------------------------------------------------------------------
-//	Setup heat conduction material properties for diffusion fluid body
-//----------------------------------------------------------------------
-class ThermoWaterBodyMaterial : public DiffusionReaction<WeaklyCompressibleFluid>
-{
-public:
-	ThermoWaterBodyMaterial()
-		: DiffusionReaction<WeaklyCompressibleFluid>({ "Phi" }, rho0_f, c_f)
-	{
-		initializeAnDiffusion<IsotropicDiffusion>("Phi", "Phi", diffusion_coff_water);
-	};
-};
-//----------------------------------------------------------------------
-//	Setup heat conduction material properties for diffusion solid body
-//----------------------------------------------------------------------
-class ThermoAirBodyMaterial : public DiffusionReaction<WeaklyCompressibleFluid>
-{
-public:
-	ThermoAirBodyMaterial() : DiffusionReaction<WeaklyCompressibleFluid>({ "Phi" }, rho0_a, c_f)
-	{
-		// only default property is given, as no heat transfer within solid considered here.
-		initializeAnDiffusion<IsotropicDiffusion>("Phi", "Phi", diffusion_coff_air);
-	};
-};
-//----------------------------------------------------------------------
-//	Application dependent solid body initial condition
-//----------------------------------------------------------------------
-class ThermoAirBodyInitialCondition
-	: public DiffusionReactionInitialCondition<FluidParticles, WeaklyCompressibleFluid>
-{
-protected:
-	size_t phi_;
-
-public:
-	explicit ThermoAirBodyInitialCondition(SPHBody& sph_body)
-		: DiffusionReactionInitialCondition<FluidParticles, WeaklyCompressibleFluid>(sph_body)
-	{
-		phi_ = particles_->diffusion_reaction_material_.SpeciesIndexMap()["Phi"];
-	};
-
-	void update(size_t index_i, Real dt)
-	{
-		species_n_[phi_][index_i] = 0.0;
-		thermal_conductivity_[index_i] = k_air;
-	};
-};
-//----------------------------------------------------------------------
-//	Application dependent fluid body initial condition
-//----------------------------------------------------------------------
-class ThermoWaterBodyInitialCondition
-	: public DiffusionReactionInitialCondition<FluidParticles, WeaklyCompressibleFluid>
-{
-protected:
-	size_t phi_;
-
-public:
-	explicit ThermoWaterBodyInitialCondition(SPHBody& sph_body)
-		: DiffusionReactionInitialCondition<FluidParticles, WeaklyCompressibleFluid>(sph_body)
-	{
-		phi_ = particles_->diffusion_reaction_material_.SpeciesIndexMap()["Phi"];
-	};
-
-	void update(size_t index_i, Real dt)
-	{
-		species_n_[phi_][index_i] = 1.0;
-		thermal_conductivity_[index_i] = k_water;
-	};
-};
-//----------------------------------------------------------------------
-//	Set thermal relaxation between different bodies
-//----------------------------------------------------------------------
-class ThermalRelaxationComplex
-	: public TwoPhaseRelaxationOfAllDiffusionSpeciesRK2<
-	TwoPhaseRelaxationOfAllDiffusionSpeciesComplex<
-	FluidParticles, WeaklyCompressibleFluid, FluidParticles, WeaklyCompressibleFluid>>
-{
-public:
-	explicit ThermalRelaxationComplex(ComplexRelation& body_complex_relation)
-		: TwoPhaseRelaxationOfAllDiffusionSpeciesRK2(body_complex_relation) {};
-	virtual ~ThermalRelaxationComplex() {};
-};
 #endif //TANK_CASE_H

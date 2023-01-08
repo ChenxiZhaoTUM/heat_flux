@@ -14,19 +14,15 @@ SET(BUILD_RELOAD_PATH "${EXECUTABLE_OUTPUT_PATH}/reload")
 
 file(MAKE_DIRECTORY ${BUILD_INPUT_PATH})
 execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory ${BUILD_INPUT_PATH})
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data/validation_tank_outer.STL
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data/3D_grotle_tank_outer_thick.STL
         DESTINATION ${BUILD_INPUT_PATH})
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data/validation_tank_inner.STL
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data/3D_grotle_tank_inner.STL
         DESTINATION ${BUILD_INPUT_PATH})
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data/validation_water.STL
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data/3D_grotle_water_0255.STL
         DESTINATION ${BUILD_INPUT_PATH})
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data/validation_air.STL
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data/3D_grotle_air_0255.STL
         DESTINATION ${BUILD_INPUT_PATH})
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data/ProbeS1.STL
-        DESTINATION ${BUILD_INPUT_PATH})
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data/ProbeS2.STL
-        DESTINATION ${BUILD_INPUT_PATH})
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data/ProbeS3.STL
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data/3D_vertical_tank.STL
         DESTINATION ${BUILD_INPUT_PATH})
 
 aux_source_directory(. DIR_SRCS)
