@@ -184,9 +184,9 @@ int main(int ac, char* av[])
 		water_average_temperature(in_output, water_block, "Phi");
 	ReducedQuantityRecording<ReduceAverage<DiffusionReactionSpeciesSummation<FluidParticles, WeaklyCompressibleFluid>>>
 		air_average_temperature(in_output, air_block, "Phi");
-	ReducedQuantityRecording<ReduceAverage<QuantitySummation<Real>>>
+	ReducedQuantityRecording<ReduceDynamics<QuantityMoment<Real>>>
 		air_rate_of_heat_transfer(in_output, air_block, "HeatFlux");
-	ReducedQuantityRecording<ReduceAverage<QuantitySummation<Real>>>
+	ReducedQuantityRecording<ReduceDynamics<QuantityMoment<Real>>>
 		water_rate_of_heat_transfer(in_output, water_block, "HeatFlux");
 	ReducedQuantityRecording<ReduceDynamics<QuantitySummation<Real>>> compute_air_total_mass(in_output, air_block, "MassiveMeasure");
 	ReducedQuantityRecording<ReduceDynamics<QuantitySummation<Real>>> compute_water_total_mass(in_output, water_block, "MassiveMeasure");
@@ -297,16 +297,16 @@ int main(int ac, char* av[])
 			air_block.updateCellLinkedListWithParticleSort(100);
 			air_block_contact.updateConfiguration();
 			air_water_complex.updateConfiguration();
-
+			
 			//liquid_temperature_observer_contact.updateConfiguration();
 			//gas_temperature_observer_contact.updateConfiguration();
-			int num = water_air_complex.getInnerRelation().base_particles_.pos_.size();
+			int num = air_water_complex.getInnerRelation().base_particles_.pos_.size();
 			int count_num = 0;
-			for (size_t k = 0; k < water_air_complex.contact_configuration_.size(); ++k)
+			for (size_t k = 0; k < air_water_complex.contact_configuration_.size(); ++k)
 			{
 				for (int i = 0; i != num; ++i)
 				{
-					Neighborhood& neighborhood = water_air_complex.contact_configuration_[k][i];
+					Neighborhood& neighborhood = air_water_complex.contact_configuration_[k][i];
 					if (neighborhood.current_size_ != 0)
 					{
 						count_num += 1;
@@ -318,8 +318,6 @@ int main(int ac, char* av[])
 				std::string output_folder_ = "./output";
 				std::string filefullpath = output_folder_ + "/" + "number_of_contact_particles" + ".dat";
 				std::ofstream out_file_(filefullpath.c_str(), std::ios::app);
-				out_file_ << "\n";
-				out_file_ << "Time " << "Num" << std::endl;
 				out_file_ << GlobalStaticVariables::physical_time_ << "  " << count_num << "  " << std::endl;
 			}
 		}
